@@ -1,0 +1,39 @@
+services:
+  frontend:
+    container_name: waygame
+    build:
+      context: .
+    restart: always
+    environment:
+      - NEXT_PUBLIC_YOUTUBE=${NEXT_PUBLIC_YOUTUBE}
+      - NEXT_PUBLIC_TELEGRAM=${NEXT_PUBLIC_TELEGRAM}
+
+    networks:
+      - dev
+
+  nginx:
+    image: nginx:stable-alpine # используем стабильный легковесный Nginx образ
+    container_name: nginx # имя контейнера на хосте, удобно для docker logs/exec
+    ports:
+      - "80:80" # проброс порта HTTP наружу
+      - "443:443" # проброс порта HTTPS наружу
+    volumes:
+      - ./data/nginx:/etc/nginx/conf.d
+      - "./gzip.conf:/etc/nginx/gzip.conf:ro" # монтируем gzip файл внутрь контейнера
+      - ./data/certbot/conf:/etc/letsencrypt
+      - ./data/certbot/www:/var/www/certbot
+    restart: always # автоматически перезапускать контейнер при падении
+    command: "/bin/sh -c 'while :; do sleep 6h & wait $${!}; nginx -s reload; done & nginx -g \"daemon off;\"'"
+    depends_on:
+      - frontend # запускать nginx после frontend
+    networks:
+      - dev # подключаем контейнер к сети dev
+
+  certbot:
+    image: certbot/certbot:latest
+    volumes:
+      - ./data/certbot/conf:/etc/letsencrypt
+      - ./data/certbot/www:/var/www/certbot
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+networks:
+  dev:
